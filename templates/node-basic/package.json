@@ -1,0 +1,12 @@
+{
+  "name": "c4-template-node",
+  "version": "0.1.0",
+  "description": "Herdr Node.js plugin starter template",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": ["herdr", "herdr-plugin"],
+  "author": "",
+  "license": "MIT"
+}

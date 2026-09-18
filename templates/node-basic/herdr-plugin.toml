@@ -1,0 +1,12 @@
+id = "c4.template-node"
+name = "Template Node Plugin"
+version = "0.1.0"
+min_herdr_version = "0.9.1"
+description = "A Node.js starter plugin for Herdr with actions and context parsing."
+platforms = ["linux", "macos", "windows"]
+
+[[actions]]
+id = "workspace-status"
+title = "Workspace Status"
+contexts = ["workspace"]
+command = ["node", "index.js"]

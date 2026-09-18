@@ -1,0 +1,12 @@
+# Cursor Rules for Herdr Plugin Monorepo
+
+You are developing Herdr plugins in this monorepo.
+Follow these rules strictly:
+1. Always place new plugins in `plugins/<plugin-name>/`.
+2. Ensure every plugin has a valid `herdr-plugin.toml` manifest conforming to `docs/PLUGIN_SPECIFICATION.md`.
+3. Never use dots in local action, pane, or link handler IDs.
+4. Always use `HERDR_BIN_PATH` environment variable when invoking Herdr CLI (fallback to "herdr").
+5. Do not write runtime state or user config inside the plugin source folder. Use `HERDR_PLUGIN_CONFIG_DIR` and `HERDR_PLUGIN_STATE_DIR`.
+6. Write all documentation and code comments in English.
+7. Run `python3 scripts/validate-plugins.py` before finishing any task.
+Refer to `AGENTS.md` and `docs/PLUGIN_SPECIFICATION.md` for full details.

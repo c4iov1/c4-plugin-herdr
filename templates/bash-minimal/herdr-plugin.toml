@@ -1,0 +1,12 @@
+id = "c4.template-bash"
+name = "Template Bash Plugin"
+version = "0.1.0"
+min_herdr_version = "0.9.1"
+description = "A lightweight shell-based starter plugin for Herdr."
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "hello-workspace"
+title = "Hello Workspace"
+contexts = ["workspace"]
+command = ["bash", "action.sh"]

@@ -1,0 +1,2 @@
+# This directory contains all Herdr plugins.
+# Each plugin must be placed in its own subdirectory here, e.g. `plugins/<plugin-name>/`.
