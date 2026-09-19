@@ -1,0 +1,11 @@
+{
+  "name": "c4-session-tab-rename",
+  "version": "0.1.0",
+  "description": "Herdr tab naming from agent session metadata and context",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "private": true,
+  "license": "MIT"
+}
