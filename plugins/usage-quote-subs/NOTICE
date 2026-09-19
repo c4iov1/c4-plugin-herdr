@@ -1,0 +1,7 @@
+Usage Quote Subs includes substantial portions of the MIT-licensed
+herdr-plan-meter project by JunSeo99. The original copyright and license are
+preserved in LICENSE.
+
+The Gemini/Antigravity provider is an independent Python implementation based
+on observed provider interfaces and the architecture of the local KAI project.
+No KAI source code is included.

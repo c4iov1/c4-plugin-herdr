@@ -1,0 +1,47 @@
+id = "c4.usage-quote-subs"
+name = "Usage Quote Subs"
+version = "0.1.0"
+min_herdr_version = "0.9.1"
+description = "Shows Claude, Codex, and Gemini subscription usage in the Herdr tab bar and a detail popup."
+platforms = ["linux", "macos", "windows"]
+
+[[startup]]
+command = ["python3", "usage.py", "install-status-command"]
+
+[[events]]
+on = "pane.agent_status_changed"
+command = ["python3", "usage.py", "event"]
+
+[[panes]]
+id = "dashboard"
+title = "Subscription Usage"
+placement = "popup"
+width = 72
+height = 20
+command = ["python3", "usage.py", "dashboard"]
+
+[[panes]]
+id = "setup"
+title = "Usage Quote Subs Setup"
+placement = "popup"
+width = "90%"
+height = 18
+command = ["python3", "usage.py", "setup"]
+
+[[actions]]
+id = "open"
+title = "Show subscription usage"
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["python3", "usage.py", "open"]
+
+[[actions]]
+id = "setup"
+title = "Configure subscription usage display"
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["python3", "usage.py", "open", "setup"]
+
+[[actions]]
+id = "refresh"
+title = "Refresh subscription usage"
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["python3", "usage.py", "refresh"]
