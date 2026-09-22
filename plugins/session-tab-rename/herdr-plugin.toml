@@ -28,9 +28,6 @@ command = ["node", "index.js", "event"]
 on = "pane.focused"
 command = ["node", "index.js", "event"]
 
-[[events]]
-on = "pane.output_changed"
-command = ["node", "index.js", "event"]
 
 [[events]]
 on = "pane.agent_detected"

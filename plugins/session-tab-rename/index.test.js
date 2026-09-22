@@ -45,6 +45,25 @@ test("extracts native names and first prompts from provider lines", () => {
     firstUserPrompt("agy", { type: "USER_INPUT", content: "<USER_REQUEST>Run tests</USER_REQUEST>" }),
     "Run tests",
   );
+  assert.equal(
+    firstUserPrompt("agy", {
+      type: "USER_INPUT",
+      content: "<USER_REQUEST>\nFix bug\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\ntime: 123\n</ADDITIONAL_METADATA>",
+    }),
+    "Fix bug",
+  );
+});
+
+test("identifies default and context tab labels", () => {
+  const { defaultTabLabel, isDefaultOrContextLabel } = require("./index.js");
+  assert.equal(defaultTabLabel("1"), true);
+  assert.equal(defaultTabLabel("Tab 2"), true);
+  assert.equal(defaultTabLabel("fix-agy-rename"), false);
+
+  assert.equal(isDefaultOrContextLabel("1", ["c4-plugin-herdr"]), true);
+  assert.equal(isDefaultOrContextLabel("c4-plugin-herdr", ["c4-plugin-herdr"]), true);
+  assert.equal(isDefaultOrContextLabel("agy · c4-plugin-herdr · main", ["c4-plugin-herdr"]), true);
+  assert.equal(isDefaultOrContextLabel("fix-agy-rename", ["c4-plugin-herdr"]), false);
 });
 
 test("removes the workspace suffix but preserves the session name", () => {
@@ -86,6 +105,16 @@ test("reads Agy rename commands and first prompt", () => {
   ].join("\n"));
   process.env.ANTIGRAVITY_HOME = root;
   assert.deepEqual(agyData("agy-1"), { name: "Deploy API", prompt: "Fix deployment" });
+  delete process.env.ANTIGRAVITY_HOME;
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("reads Agy title from annotation and fallback sqlite", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "session-tab-rename-agy-ann-"));
+  fs.mkdirSync(path.join(root, "annotations"), { recursive: true });
+  fs.writeFileSync(path.join(root, "annotations", "agy-2.pbtxt"), 'title:"Feature X"\n');
+  process.env.ANTIGRAVITY_HOME = root;
+  assert.deepEqual(agyData("agy-2"), { name: "Feature X", prompt: null });
   delete process.env.ANTIGRAVITY_HOME;
   fs.rmSync(root, { recursive: true, force: true });
 });

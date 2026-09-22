@@ -155,9 +155,10 @@ function firstUserPrompt(agent, value) {
   }
   if (agent === "agy") {
     if (type !== "USER_INPUT") return null;
-    return meaningful(String(contentText(value.content) || "")
-      .replace(/^<USER_REQUEST>\s*/i, "")
-      .replace(/\s*<\/USER_REQUEST>$/i, ""));
+    const raw = String(contentText(value.content) || "");
+    const match = raw.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/i);
+    const cleaned = match ? match[1] : raw.replace(/<\/?USER_REQUEST>/gi, "");
+    return meaningful(cleaned);
   }
   const role = value?.role || value?.message?.role;
   if (role !== "user") return null;
@@ -315,26 +316,68 @@ function piData(sessionId, sessionRef) {
 }
 
 function agyData(sessionId) {
+  if (!sessionId) return { name: null, prompt: null };
   const root = agentRoots("agy")[0];
-  const history = readText(path.join(root, "history.jsonl"));
-  if (!history) return { name: null, prompt: null };
   let name = null;
   let prompt = null;
-  for (const line of history.split(/\r?\n/)) {
-    const value = parseJson(line);
-    if (value?.conversationId !== sessionId) continue;
-    const display = meaningful(value.display);
-    if (value.type === "slash_command") {
-      const rename = String(display || "").match(/^\/rename\s+(.+)$/i);
-      if (rename) name = meaningful(rename[1]);
-    } else {
-      prompt ||= display;
+
+  // 1. History JSONL (slash commands /rename have high precedence)
+  const history = readText(path.join(root, "history.jsonl"));
+  if (history) {
+    for (const line of history.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      const value = parseJson(line);
+      if (value?.conversationId !== sessionId) continue;
+      const display = meaningful(value.display);
+      if (value.type === "slash_command") {
+        const rename = String(display || "").match(/^\/rename\s+(.+)$/i);
+        if (rename) name = meaningful(rename[1]);
+      } else {
+        prompt ||= display;
+      }
     }
   }
+
+  // 2. Annotations pbtxt
   const annotation = path.join(root, "annotations", `${sessionId}.pbtxt`);
   const annotationText = readText(annotation);
-  const match = annotationText?.match(/title:\"([^\"]+)\"/);
+  const match = annotationText?.match(/title:\s*["']?([^"\r\n]+)["']?/);
   name ||= meaningful(match?.[1]);
+
+  // 3. SQLite conversation_summaries.db
+  const dbFile = path.join(root, "conversation_summaries.db");
+  const row = sqliteQuery(
+    dbFile,
+    `SELECT title, preview FROM conversation_summaries WHERE conversation_id = ${sqlString(sessionId)} LIMIT 1;`
+  );
+  if (row) {
+    const [title, preview] = row.split("\t");
+    name ||= meaningful(title);
+    prompt ||= meaningful(preview);
+  }
+
+  // 4. Transcript JSONL fallback for prompt
+  if (!prompt) {
+    const transcript = path.join(root, "brain", sessionId, ".system_generated", "logs", "transcript.jsonl");
+    const transcriptText = readText(transcript);
+    if (transcriptText) {
+      for (const line of transcriptText.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        const val = parseJson(line);
+        const p = firstUserPrompt("agy", val);
+        if (p) {
+          prompt = p;
+          break;
+        }
+      }
+    }
+  }
+
+  // Avoid raw UUIDs as session titles
+  if (name && (name === sessionId || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name))) {
+    name = null;
+  }
+
   return { name, prompt };
 }
 
@@ -387,11 +430,78 @@ function opencodeData(sessionId) {
   };
 }
 
+function resolveAgySessionId(pane) {
+  const ref = pane?.agent_session || pane?.agentSession;
+  const directId = ref?.value || pane?.agent_session_id || pane?.agentSessionId;
+  if (directId) return directId;
+
+  const root = agentRoots("agy")[0];
+
+  // A. Process PID -> open lock file in presence directory
+  if (pane?.pane_id) {
+    const processInfo = parseJson(herdr(["pane", "process-info", "--pane", pane.pane_id], { timeout: 1500 }));
+    const processes = processInfo?.result?.process_info?.foreground_processes || [];
+    const agyProc = processes.find((p) =>
+      ["agy", "antigravity", "antigravity-cli"].includes(String(p.name || p.argv0 || "").toLowerCase())
+    );
+    if (agyProc?.pid) {
+      const pid = agyProc.pid;
+      if (process.platform === "linux") {
+        try {
+          const fds = fs.readdirSync(`/proc/${pid}/fd`);
+          for (const fd of fds) {
+            const target = fs.readlinkSync(`/proc/${pid}/fd/${fd}`);
+            const m = target.match(/\/presence\/([a-f0-9-]+)\.lock$/) || target.match(/\/conversations\/([a-f0-9-]+)\.db$/);
+            if (m) return m[1];
+          }
+        } catch {}
+      } else {
+        const out = run("lsof", ["-p", String(pid), "-Fn"], { timeout: 1000 });
+        if (out) {
+          const m = out.match(/n.*\/presence\/([a-f0-9-]+)\.lock/) || out.match(/n.*\/conversations\/([a-f0-9-]+)\.db/);
+          if (m) return m[1];
+        }
+      }
+    }
+  }
+
+  // B. Fallback: match by workspace CWD from SQLite conversation_summaries.db
+  const cwd = pane?.foreground_cwd || pane?.cwd;
+  if (cwd) {
+    const dbFile = path.join(root, "conversation_summaries.db");
+    const uri = `file://${cwd}`;
+    const row = sqliteQuery(
+      dbFile,
+      `SELECT conversation_id FROM conversation_summaries WHERE workspace_uris LIKE '%${uri.replaceAll("'", "''")}%' ORDER BY last_modified_time DESC LIMIT 1;`
+    );
+    if (row && row.trim()) return row.trim();
+  }
+
+  // C. Fallback: match by workspace CWD in history.jsonl
+  if (cwd) {
+    const history = readText(path.join(root, "history.jsonl"));
+    if (history) {
+      const lines = history.split(/\r?\n/).filter(Boolean);
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const val = parseJson(lines[i]);
+        if (val?.conversationId && val?.workspace === cwd) {
+          return val.conversationId;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 function nativeSessionData(pane, cache) {
   const agent = normalizeAgent(pane?.agent || pane?.agent_session?.agent);
   const ref = pane?.agent_session || pane?.agentSession || null;
-  const sessionId = ref?.value || pane?.agent_session_id || pane?.agentSessionId;
-  if (!agent || !sessionId) return { agent, name: null, prompt: null };
+  let sessionId = ref?.value || pane?.agent_session_id || pane?.agentSessionId;
+  if (agent === "agy" && !sessionId) {
+    sessionId = resolveAgySessionId(pane);
+  }
+  if (!agent || !sessionId) return { agent, sessionId: null, name: null, prompt: null };
   const key = `${agent}:${ref?.kind || "id"}:${sessionId}`;
   if (cache.has(key)) return cache.get(key);
   let data;
@@ -509,7 +619,20 @@ function lockState(file) {
 }
 
 function defaultTabLabel(label) {
-  return !label || /^\d+$/.test(label);
+  return !label || /^\d+$/.test(label) || /^tab[-\s]*\d+$/i.test(label);
+}
+
+function isDefaultOrContextLabel(label, workspaceNames = []) {
+  if (defaultTabLabel(label)) return true;
+  const lower = String(label || "").toLowerCase();
+  for (const ws of workspaceNames) {
+    if (ws && lower === String(ws).toLowerCase()) return true;
+  }
+  // Context labels generated by contextFromPane e.g. "agy · c4-plugin-herdr · main" or "c4-plugin-herdr · main"
+  if (typeof label === "string" && label.includes(" · ")) {
+    return true;
+  }
+  return false;
 }
 
 function renameTab(tabId, label) {
@@ -535,24 +658,34 @@ function reconcile(options = {}) {
   for (const tab of targets) {
     const pane = focusedPaneForTab(tab, snap);
     if (!pane) continue;
-    const record = state.tabs[tab.tab_id] || { manual: !defaultTabLabel(tab.label), lastAutoLabel: null };
+    const workspace = arrays(snap.workspaces).find((item) => item.workspace_id === pane.workspace_id);
+    const cwdBase = path.basename(pane.foreground_cwd || pane.cwd || "");
+    const workspaceNames = [cwdBase, workspace?.label].filter(Boolean);
+    const isAutoOrContext = isDefaultOrContextLabel(tab.label, workspaceNames);
+
+    const record = state.tabs[tab.tab_id] || { manual: !isAutoOrContext, lastAutoLabel: null };
+
+    const session = nativeSessionData(pane, cache);
+    const sessionName = stripWorkspaceSuffix(session.name, workspaceNames);
+    const desired = compact(sessionName || session.prompt || contextFromPane(pane, snap));
+
     if (!record.manual && record.lastAutoLabel && tab.label !== record.lastAutoLabel) {
-      record.manual = true;
+      if (!isAutoOrContext && tab.label !== desired) {
+        record.manual = true;
+      }
     }
+
     state.tabs[tab.tab_id] = record;
     if (record.manual) continue;
-    const session = nativeSessionData(pane, cache);
-    const workspace = arrays(snap.workspaces).find((item) => item.workspace_id === pane.workspace_id);
-    const sessionName = stripWorkspaceSuffix(session.name, [
-      path.basename(pane.foreground_cwd || pane.cwd || ""),
-      workspace?.label,
-    ]);
-    const desired = compact(sessionName || session.prompt || contextFromPane(pane, snap));
-    if (!desired) continue;
-    if (desired !== tab.label && renameTab(tab.tab_id, desired)) {
-      debug(`renamed ${tab.tab_id}: ${tab.label} -> ${desired}`);
+
+    if (desired && desired !== tab.label) {
+      if (renameTab(tab.tab_id, desired)) {
+        debug(`renamed ${tab.tab_id}: ${tab.label} -> ${desired}`);
+        record.lastAutoLabel = desired;
+      }
+    } else if (desired && desired === tab.label) {
+      record.lastAutoLabel = desired;
     }
-    record.lastAutoLabel = desired;
   }
   saveState(file, state);
 }
@@ -581,7 +714,7 @@ function main() {
     const event = process.env.HERDR_PLUGIN_EVENT || mode;
     const targetTab = tabIdFromContext();
     const targetPane = paneIdFromContext();
-    const onlyTab = event === "pane.output_changed" || event === "pane.agent_detected"
+    const onlyTab = event === "pane.agent_detected"
       || event === "pane.agent_status_changed" || event === "pane.focused" || event === "pane.exited"
       || event === "pane.closed" ? targetTab : null;
     reconcile({ onlyTabId: onlyTab, tabId: targetTab, paneId: targetPane });
@@ -594,8 +727,12 @@ if (require.main === module) main();
 
 module.exports = {
   agyData,
+  defaultTabLabel,
   firstUserPrompt,
+  isDefaultOrContextLabel,
+  nativeSessionData,
   normalizeAgent,
+  resolveAgySessionId,
   scanJsonl,
   sessionName,
   stripWorkspaceSuffix,
