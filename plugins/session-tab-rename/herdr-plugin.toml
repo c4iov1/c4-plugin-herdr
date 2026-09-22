@@ -13,19 +13,11 @@ on = "tab.created"
 command = ["node", "index.js", "event"]
 
 [[events]]
-on = "tab.focused"
-command = ["node", "index.js", "event"]
-
-[[events]]
 on = "tab.renamed"
 command = ["node", "index.js", "event"]
 
 [[events]]
 on = "pane.created"
-command = ["node", "index.js", "event"]
-
-[[events]]
-on = "pane.focused"
 command = ["node", "index.js", "event"]
 
 

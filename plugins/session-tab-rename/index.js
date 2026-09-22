@@ -659,11 +659,11 @@ function reconcile(options = {}) {
   if (!snap) return;
   const tabs = arrays(snap.tabs);
   const paneId = options.paneId;
-  const contextTabId = options.tabId;
+  const contextTabId = options.onlyTabId || options.tabId;
   let targets = tabs;
-  if (options.onlyTabId) {
-    targets = tabs.filter((tab) => tab.tab_id === options.onlyTabId);
-  } else if (paneId && !contextTabId) {
+  if (contextTabId) {
+    targets = tabs.filter((tab) => tab.tab_id === contextTabId);
+  } else if (paneId) {
     const pane = arrays(snap.panes).find((item) => item.pane_id === paneId);
     if (pane) targets = tabs.filter((tab) => tab.tab_id === pane.tab_id);
   }
@@ -791,10 +791,7 @@ function main() {
     const event = process.env.HERDR_PLUGIN_EVENT || mode;
     const targetTab = tabIdFromContext();
     const targetPane = paneIdFromContext();
-    const onlyTab = event === "pane.agent_detected"
-      || event === "pane.agent_status_changed" || event === "pane.focused" || event === "pane.exited"
-      || event === "pane.closed" ? targetTab : null;
-    reconcile({ onlyTabId: onlyTab, tabId: targetTab, paneId: targetPane });
+    reconcile({ onlyTabId: targetTab, tabId: targetTab, paneId: targetPane });
   } finally {
     release();
   }
