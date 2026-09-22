@@ -1,0 +1,141 @@
+{
+  "protectedPaths": [
+    "\\.env$",
+    "\\.env\\.[a-zA-Z0-9_-]+$",
+    "secrets?\\.(json|yaml|yml|toml|conf)$",
+    "credentials?\\.(json|yaml|yml|toml|conf)$",
+    "/\\.ssh(/|$)",
+    "/\\.aws(/|$)",
+    "/\\.gnupg(/|$)",
+    "^/etc/"
+  ],
+  "protectedPathsWhitelist": [
+    "\\.env\\.example$",
+    "\\.env\\.sample$",
+    "\\.env\\.template$"
+  ],
+  "hardDenyPatterns": [
+    {
+      "pattern": "\\brm\\s+.*(-[a-zA-Z]*r[a-zA-Z]*f|-rf?|--recursive)\\s+([~/]|$|\\.\\./|\\$HOME)",
+      "label": "System / root directory recursive deletion (rm -rf / or ~)"
+    },
+    {
+      "pattern": "\\b(chmod|chown)\\s+.*(-R\\s+)?777\\b",
+      "label": "Insecure permissions assignment (chmod 777)"
+    },
+    {
+      "pattern": "\\b(curl|wget)\\s+.*\\|\\s*(ba)?sh\\b",
+      "label": "Direct piping of remote network script into shell execution"
+    },
+    {
+      "pattern": "\\b(DROP|TRUNCATE)\\s+(TABLE|DATABASE)\\b",
+      "label": "Destructive SQL statements (DROP/TRUNCATE TABLE/DATABASE)"
+    },
+    {
+      "pattern": "\\b(mkfs|dd\\s+if=/dev/)\\b",
+      "label": "Direct filesystem destruction command"
+    }
+  ],
+  "delegateToUserPatterns": [
+    {
+      "pattern": "\\b(sudo|su|doas)\\b",
+      "label": "Superuser / root privilege escalation",
+      "reason": "Requires administrative privileges. Cannot be run autonomously by agents."
+    },
+    {
+      "pattern": "\\b(brew\\s+install|apt(-get)?\\s+install|pacman\\s+-S|yum\\s+install)\\b",
+      "label": "System-wide package installation",
+      "reason": "System package managers mutate the host operating system."
+    },
+    {
+      "pattern": "\\b(npm|yarn|pnpm|cargo)\\s+publish\\b|\\bdocker\\s+push\\b",
+      "label": "Remote artifact / registry publishing",
+      "reason": "Publishing releases or container images must be done intentionally by human."
+    },
+    {
+      "pattern": "\\bgit\\s+push\\s+.*(--force|-f)\\b",
+      "label": "Forced remote Git push",
+      "reason": "Destructive Git push --force can overwrite remote history."
+    },
+    {
+      "pattern": "\\bgit\\s+reset\\s+--hard\\b",
+      "label": "Hard Git reset",
+      "reason": "Destroys uncommitted changes and resets Git working tree."
+    }
+  ],
+  "askPatterns": [
+    {
+      "pattern": "\\bgit\\s+(commit|push)\\b",
+      "label": "Git commit or push"
+    },
+    {
+      "pattern": "\\b(curl|wget|ssh|scp|rsync)\\b",
+      "label": "Direct network / remote transfer command"
+    },
+    {
+      "pattern": "\\brm\\s+.*(-[a-zA-Z]*r[a-zA-Z]*|-R|--recursive)\\b",
+      "label": "Recursive directory deletion"
+    }
+  ],
+  "safeCommandPrefixes": [
+    "git status",
+    "git diff",
+    "git log",
+    "git show",
+    "git branch",
+    "git checkout",
+    "git switch",
+    "git stash",
+    "git fetch",
+    "git pull",
+    "ls",
+    "cat",
+    "head",
+    "tail",
+    "grep",
+    "rg",
+    "find",
+    "pwd",
+    "which",
+    "echo",
+    "node",
+    "python",
+    "python3",
+    "cargo build",
+    "cargo check",
+    "cargo test",
+    "cargo clippy",
+    "npm test",
+    "npm run",
+    "npm install",
+    "npm ci",
+    "pnpm test",
+    "pnpm run",
+    "pnpm install",
+    "yarn test",
+    "yarn build",
+    "yarn install",
+    "tsc",
+    "eslint",
+    "prettier",
+    "biome",
+    "pytest",
+    "vitest",
+    "jest",
+    "go build",
+    "go test",
+    "make",
+    "cmake"
+  ],
+  "autoApprovedTools": [
+    "read",
+    "read_file",
+    "view_file",
+    "artifact_read",
+    "write",
+    "edit",
+    "write_to_file",
+    "replace_file_content",
+    "multi_replace_file_content"
+  ]
+}

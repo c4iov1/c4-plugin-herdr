@@ -1,0 +1,27 @@
+id = "c4.permission-gate"
+name = "Permission Gate"
+version = "0.1.0"
+min_herdr_version = "0.9.1"
+description = "Centralized, uniform permission gate and safety policy for coding agents in Herdr."
+platforms = ["linux", "macos", "windows"]
+
+[[startup]]
+command = ["node", "scripts/setup.js", "--verify-only"]
+
+[[actions]]
+id = "install-hooks"
+title = "Install / Verify Permission Hooks"
+contexts = ["global"]
+command = ["node", "scripts/setup.js"]
+
+[[actions]]
+id = "uninstall-hooks"
+title = "Uninstall Permission Hooks"
+contexts = ["global"]
+command = ["node", "scripts/uninstall.js"]
+
+[[actions]]
+id = "status"
+title = "Show Permission Gate Status"
+contexts = ["global"]
+command = ["node", "scripts/status.js"]

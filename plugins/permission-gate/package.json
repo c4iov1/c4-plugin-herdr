@@ -1,0 +1,19 @@
+{
+  "name": "c4-permission-gate",
+  "version": "0.1.0",
+  "description": "Centralized permission gate and safety policy for coding agents in Herdr",
+  "main": "bin/gatekeeper.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node scripts/status.js"
+  },
+  "keywords": [
+    "herdr",
+    "herdr-plugin",
+    "permissions",
+    "security",
+    "gatekeeper"
+  ],
+  "author": "C4",
+  "license": "MIT"
+}
