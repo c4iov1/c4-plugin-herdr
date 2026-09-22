@@ -678,34 +678,89 @@ function reconcile(options = {}) {
     const workspaceNames = [cwdBase, workspace?.label].filter(Boolean);
     const isAutoOrContext = isDefaultOrContextLabel(tab.label, workspaceNames);
 
-    const record = state.tabs[tab.tab_id] || { manual: !isAutoOrContext, lastAutoLabel: null };
+    let record = state.tabs[tab.tab_id];
+    if (!record) {
+      const isManual = !isAutoOrContext && !defaultTabLabel(tab.label);
+      record = {
+        manual: isManual,
+        settled: false,
+        lastAutoLabel: isAutoOrContext ? null : tab.label,
+        sessionId: null,
+      };
+      state.tabs[tab.tab_id] = record;
+    }
 
+    // Regra 1: Renomeio manual = não mexe mais no nome da aba
+    if (record.manual) {
+      continue;
+    }
+
+    // Se o usuário renomeou manualmente fora do plugin:
+    if (record.lastAutoLabel && tab.label !== record.lastAutoLabel && !isAutoOrContext && !defaultTabLabel(tab.label)) {
+      record.manual = true;
+      continue;
+    }
+
+    // Regras 2 e 3: Sessão já recebeu nome definitivo (por rename ou primeiro prompt) = NÃO MEXE MAIS
+    if (record.settled || (record.settled === undefined && record.lastAutoLabel && !isAutoOrContext)) {
+      record.settled = true;
+      continue;
+    }
+
+    // Tab ainda pendente de nome definitivo:
     const session = nativeSessionData(pane, cache, record);
     if (session.sessionId) {
       record.sessionId = session.sessionId;
     }
     const sessionName = stripWorkspaceSuffix(session.name, workspaceNames);
-    const desired = compact(sessionName || session.prompt || contextFromPane(pane, snap));
 
-    if (!record.manual && record.lastAutoLabel && tab.label !== record.lastAutoLabel) {
-      if (!isAutoOrContext && tab.label !== desired) {
-        record.manual = true;
-      }
+    let desired = null;
+    let isDefinitive = false;
+
+    if (sessionName) {
+      // Sessão com rename explícito
+      desired = compact(sessionName);
+      isDefinitive = true;
+    } else if (session.prompt) {
+      // Sessão sem rename (regra de primeiro prompt)
+      desired = compact(session.prompt);
+      isDefinitive = true;
+    } else {
+      // Contexto temporário enquanto não há nem prompt nem rename
+      desired = compact(contextFromPane(pane, snap));
+      isDefinitive = false;
     }
 
-    state.tabs[tab.tab_id] = record;
-    if (record.manual) continue;
+    if (!desired) continue;
 
-    if (desired && desired !== tab.label) {
+    if (desired !== tab.label) {
       if (renameTab(tab.tab_id, desired)) {
-        debug(`renamed ${tab.tab_id}: ${tab.label} -> ${desired}`);
+        debug(`renamed ${tab.tab_id}: ${tab.label} -> ${desired} (definitive: ${isDefinitive})`);
         record.lastAutoLabel = desired;
       }
-    } else if (desired && desired === tab.label) {
+    } else {
       record.lastAutoLabel = desired;
+    }
+
+    // Uma vez definido o nome definitivo: settle e não mexe mais!
+    if (isDefinitive) {
+      record.settled = true;
     }
   }
   saveState(file, state);
+}
+
+function renameNowCurrentTab() {
+  const id = tabIdFromContext();
+  const snap = snapshot();
+  const tabId = id || snap?.focused_tab_id || arrays(snap?.tabs)[0]?.tab_id;
+  if (!tabId) return;
+  const file = statePath();
+  const state = loadState(file);
+  const current = state.tabs[tabId] || {};
+  state.tabs[tabId] = { ...current, manual: false, settled: false };
+  saveState(file, state);
+  reconcile({ onlyTabId: tabId });
 }
 
 function resetCurrentTab() {
@@ -715,7 +770,7 @@ function resetCurrentTab() {
   if (!tabId) return;
   const file = statePath();
   const state = loadState(file);
-  state.tabs[tabId] = { manual: false, lastAutoLabel: null, sessionId: null };
+  state.tabs[tabId] = { manual: false, settled: false, lastAutoLabel: null, sessionId: null };
   saveState(file, state);
   reconcile({ onlyTabId: tabId });
 }
@@ -725,8 +780,12 @@ function main() {
   const release = lockState(statePath());
   if (release === null) return;
   try {
-    if (mode === "reset" || mode === "rename-now") {
+    if (mode === "reset") {
       resetCurrentTab();
+      return;
+    }
+    if (mode === "rename-now") {
+      renameNowCurrentTab();
       return;
     }
     const event = process.env.HERDR_PLUGIN_EVENT || mode;
