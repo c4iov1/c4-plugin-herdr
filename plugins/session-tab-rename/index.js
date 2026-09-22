@@ -430,76 +430,91 @@ function opencodeData(sessionId) {
   };
 }
 
+function findAgyPid(paneId) {
+  if (!paneId) return null;
+  const processInfo = parseJson(herdr(["pane", "process-info", "--pane", paneId], { timeout: 1500 }));
+  const processes = processInfo?.result?.process_info?.foreground_processes || [];
+  for (const p of processes) {
+    if (["agy", "antigravity", "antigravity-cli"].includes(String(p.name || p.argv0 || "").toLowerCase())) {
+      return p.pid;
+    }
+  }
+  // When agy runs a tool/command, it may not be in foreground_processes.
+  // Check direct children of shell_pid to find the agy process in this pane.
+  const shellPid = processInfo?.result?.process_info?.shell_pid;
+  if (shellPid) {
+    const psOut = run("ps", ["-A", "-o", "pid,ppid,comm"], { timeout: 1000 });
+    if (psOut) {
+      for (const line of psOut.split("\n")) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 3) {
+          const [pidStr, ppidStr, comm] = parts;
+          if (ppidStr === String(shellPid) && comm && comm.toLowerCase().includes("agy")) {
+            return parseInt(pidStr, 10);
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function resolveAgySessionId(pane) {
   const ref = pane?.agent_session || pane?.agentSession;
   const directId = ref?.value || pane?.agent_session_id || pane?.agentSessionId;
   if (directId) return directId;
 
-  const root = agentRoots("agy")[0];
-
-  // A. Process PID -> open lock file in presence directory
-  if (pane?.pane_id) {
-    const processInfo = parseJson(herdr(["pane", "process-info", "--pane", pane.pane_id], { timeout: 1500 }));
-    const processes = processInfo?.result?.process_info?.foreground_processes || [];
-    const agyProc = processes.find((p) =>
-      ["agy", "antigravity", "antigravity-cli"].includes(String(p.name || p.argv0 || "").toLowerCase())
-    );
-    if (agyProc?.pid) {
-      const pid = agyProc.pid;
-      if (process.platform === "linux") {
-        try {
-          const fds = fs.readdirSync(`/proc/${pid}/fd`);
-          for (const fd of fds) {
-            const target = fs.readlinkSync(`/proc/${pid}/fd/${fd}`);
-            const m = target.match(/\/presence\/([a-f0-9-]+)\.lock$/) || target.match(/\/conversations\/([a-f0-9-]+)\.db$/);
-            if (m) return m[1];
+  const pid = findAgyPid(pane?.pane_id);
+  if (pid) {
+    let sessionId = null;
+    if (process.platform === "linux") {
+      try {
+        const fds = fs.readdirSync(`/proc/${pid}/fd`);
+        for (const fd of fds) {
+          const target = fs.readlinkSync(`/proc/${pid}/fd/${fd}`);
+          const m = target.match(/\/presence\/([a-f0-9-]+)\.lock$/) ||
+                    target.match(/\/conversations\/([a-f0-9-]+)\.db/) ||
+                    target.match(/\/brain\/([a-f0-9-]+)/);
+          if (m) {
+            sessionId = m[1];
+            break;
           }
-        } catch {}
-      } else {
-        const out = run("lsof", ["-p", String(pid), "-Fn"], { timeout: 1000 });
-        if (out) {
-          const m = out.match(/n.*\/presence\/([a-f0-9-]+)\.lock/) || out.match(/n.*\/conversations\/([a-f0-9-]+)\.db/);
-          if (m) return m[1];
+        }
+      } catch {}
+    } else {
+      const out = run("lsof", ["-p", String(pid), "-Fn"], { timeout: 1000 });
+      if (out) {
+        const m = out.match(/n.*\/presence\/([a-f0-9-]+)\.lock/) ||
+                  out.match(/n.*\/conversations\/([a-f0-9-]+)\.db/) ||
+                  out.match(/n.*\/brain\/([a-f0-9-]+)/);
+        if (m) {
+          sessionId = m[1];
         }
       }
     }
-  }
 
-  // B. Fallback: match by workspace CWD from SQLite conversation_summaries.db
-  const cwd = pane?.foreground_cwd || pane?.cwd;
-  if (cwd) {
-    const dbFile = path.join(root, "conversation_summaries.db");
-    const uri = `file://${cwd}`;
-    const row = sqliteQuery(
-      dbFile,
-      `SELECT conversation_id FROM conversation_summaries WHERE workspace_uris LIKE '%${uri.replaceAll("'", "''")}%' ORDER BY last_modified_time DESC LIMIT 1;`
-    );
-    if (row && row.trim()) return row.trim();
-  }
-
-  // C. Fallback: match by workspace CWD in history.jsonl
-  if (cwd) {
-    const history = readText(path.join(root, "history.jsonl"));
-    if (history) {
-      const lines = history.split(/\r?\n/).filter(Boolean);
-      for (let i = lines.length - 1; i >= 0; i--) {
-        const val = parseJson(lines[i]);
-        if (val?.conversationId && val?.workspace === cwd) {
-          return val.conversationId;
-        }
+    if (sessionId) {
+      if (pane?.pane_id) {
+        herdr(["pane", "report-agent-session", "--source", "herdr:session-tab-rename", "--agent", "agy", "--agent-session-id", sessionId, pane.pane_id]);
       }
+      return sessionId;
     }
   }
 
   return null;
 }
 
-function nativeSessionData(pane, cache) {
+function nativeSessionData(pane, cache, record) {
   const agent = normalizeAgent(pane?.agent || pane?.agent_session?.agent);
   const ref = pane?.agent_session || pane?.agentSession || null;
   let sessionId = ref?.value || pane?.agent_session_id || pane?.agentSessionId;
-  if (agent === "agy" && !sessionId) {
-    sessionId = resolveAgySessionId(pane);
+  if (agent === "agy") {
+    if (!sessionId) {
+      sessionId = resolveAgySessionId(pane);
+    }
+    if (!sessionId && record?.sessionId) {
+      sessionId = record.sessionId;
+    }
   }
   if (!agent || !sessionId) return { agent, sessionId: null, name: null, prompt: null };
   const key = `${agent}:${ref?.kind || "id"}:${sessionId}`;
@@ -665,7 +680,10 @@ function reconcile(options = {}) {
 
     const record = state.tabs[tab.tab_id] || { manual: !isAutoOrContext, lastAutoLabel: null };
 
-    const session = nativeSessionData(pane, cache);
+    const session = nativeSessionData(pane, cache, record);
+    if (session.sessionId) {
+      record.sessionId = session.sessionId;
+    }
     const sessionName = stripWorkspaceSuffix(session.name, workspaceNames);
     const desired = compact(sessionName || session.prompt || contextFromPane(pane, snap));
 
@@ -697,7 +715,7 @@ function resetCurrentTab() {
   if (!tabId) return;
   const file = statePath();
   const state = loadState(file);
-  state.tabs[tabId] = { manual: false, lastAutoLabel: null };
+  state.tabs[tabId] = { manual: false, lastAutoLabel: null, sessionId: null };
   saveState(file, state);
   reconcile({ onlyTabId: tabId });
 }
