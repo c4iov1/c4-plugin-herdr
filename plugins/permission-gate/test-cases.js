@@ -232,6 +232,31 @@ const testCases = [
     cmd: "git grep -n -i 'isreadonly' -- plugins/",
     expected: "ALLOW",
   },
+  {
+    name: "time sqlite3 query inside workspace",
+    cmd: 'time sqlite3 db.sqlite "SELECT * FROM users"',
+    expected: "ALLOW",
+  },
+  {
+    name: "time sqlite3 dot command inside workspace",
+    cmd: 'time sqlite3 ./prisma/dev.db ".tables"',
+    expected: "ALLOW",
+  },
+  {
+    name: "time sqlite3 query outside workspace",
+    cmd: 'time sqlite3 /tmp/test.db "SELECT 1"',
+    expected: "ALLOW",
+  },
+  {
+    name: "time with flags sqlite3 query",
+    cmd: 'time -p sqlite3 db.sqlite "SELECT count(*) FROM users"',
+    expected: "ALLOW",
+  },
+  {
+    name: "time go test",
+    cmd: "time go test ./...",
+    expected: "ALLOW",
+  },
 ];
 
 let failed = 0;

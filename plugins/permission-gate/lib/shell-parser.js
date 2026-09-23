@@ -81,15 +81,24 @@ function extractPathCandidates(command) {
   // Track sqlite3 positional arguments (first is DB path, remaining are SQL queries)
   let isSqlite = false;
   let sqlitePositionalCount = 0;
-  if (tokens.length > 0 && tokens[0].toLowerCase().split(/[/\\]/).pop() === "sqlite3") {
-    isSqlite = true;
+  let sqliteIndex = -1;
+  for (let idx = 0; idx < tokens.length; idx++) {
+    const tokenClean = tokens[idx].toLowerCase().split(/[/\\]/).pop();
+    if (tokenClean === "sqlite3") {
+      isSqlite = true;
+      sqliteIndex = idx;
+      break;
+    }
+    if (tokenClean !== "time" && !tokens[idx].startsWith("-")) {
+      break;
+    }
   }
 
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (!t || SHELL_OPERATORS.has(t) || t.startsWith("-")) continue;
 
-    if (isSqlite && i > 0) {
+    if (isSqlite && i > sqliteIndex) {
       sqlitePositionalCount++;
       if (sqlitePositionalCount > 1) {
         // Skip SQL statements and dot-commands

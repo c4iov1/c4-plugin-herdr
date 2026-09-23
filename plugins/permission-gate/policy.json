@@ -134,6 +134,7 @@
     "go test",
     "go",
     "sqlite3",
+    "time sqlite3",
     "launchctl print",
     "launchctl list",
     "tailscale",

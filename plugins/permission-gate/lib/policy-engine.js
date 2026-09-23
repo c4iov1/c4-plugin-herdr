@@ -42,6 +42,22 @@ const READ_ONLY_PREFIXES = [
 ];
 
 /**
+ * Strips command wrappers such as 'time' or '/usr/bin/time' to evaluate the underlying command.
+ *
+ * @param {string} command - Shell command.
+ * @returns {string} Unwrapped command.
+ */
+function stripCommandWrappers(command) {
+  if (!command) return "";
+  let cmd = command.trim();
+  const timeRegex = /^(?:\/usr\/bin\/)?time(?:\s+-[a-zA-Z0-9_-]+)*\s+/i;
+  if (timeRegex.test(cmd)) {
+    cmd = cmd.replace(timeRegex, "").trim();
+  }
+  return cmd;
+}
+
+/**
  * Determine if a shell command consists exclusively of read-only/inspection operations.
  *
  * @param {string} command - Shell command.
@@ -56,7 +72,7 @@ function isReadOnlyCommand(command) {
   }
   const parts = stripped.split(/[;&|]+/);
   for (let part of parts) {
-    part = part.trim();
+    part = stripCommandWrappers(part.trim());
     if (!part) continue;
     const words = splitShellWords(part);
     if (words.length === 0) continue;
@@ -252,10 +268,11 @@ function extractFilePaths(toolName, params) {
  * @returns {object} Decision object.
  */
 function evaluateSingleCommand({ command, cwd, workspaceRoot, policy }) {
-  const strippedCommand = stripHeredocBodies(command);
+  const unwrappedCommand = stripCommandWrappers(command);
+  const strippedCommand = stripHeredocBodies(unwrappedCommand || command);
 
   // Check path candidates inside the shell command for sensitive files
-  const pathCandidates = extractPathCandidates(command);
+  const pathCandidates = extractPathCandidates(unwrappedCommand || command);
   for (const rawPath of pathCandidates) {
     const resolved = resolvePath(rawPath, cwd);
     if (isProtectedPath(resolved, policy)) {
@@ -353,8 +370,14 @@ function evaluateSingleCommand({ command, cwd, workspaceRoot, policy }) {
 
   // Check Safe Command Prefixes
   const lowerCmd = strippedCommand.toLowerCase();
+  const lowerRaw = stripHeredocBodies(command).toLowerCase();
   for (const prefix of policy.safeCommandPrefixes) {
-    if (lowerCmd === prefix || lowerCmd.startsWith(prefix + " ")) {
+    if (
+      lowerCmd === prefix ||
+      lowerCmd.startsWith(prefix + " ") ||
+      lowerRaw === prefix ||
+      lowerRaw.startsWith(prefix + " ")
+    ) {
       return {
         decision: "ALLOW",
         reason: `Standard development command (${prefix}) auto-approved.`,
@@ -531,6 +554,7 @@ module.exports = {
   evaluateToolCall,
   evaluateSingleCommand,
   splitCommandChain,
+  stripCommandWrappers,
   isReadOnlyCommand,
   isLocalhostNetworkCommand,
   formatDelegationDirective,
