@@ -82,6 +82,21 @@ function extractPathCandidates(command) {
     const t = tokens[i];
     if (!t || SHELL_OPERATORS.has(t) || t.startsWith("-")) continue;
 
+    // Skip inline script arguments following -c, -e, --eval (e.g. python3 -c "<code>", node -e "<code>")
+    if (i > 0 && (tokens[i - 1] === "-c" || tokens[i - 1] === "-e" || tokens[i - 1] === "--eval")) {
+      continue;
+    }
+
+    // Skip commit message arguments following -m or --message
+    if (i > 0 && (tokens[i - 1] === "-m" || tokens[i - 1] === "--message")) {
+      continue;
+    }
+
+    // Skip scoped package names like @org/pkg
+    if (t.startsWith("@")) {
+      continue;
+    }
+
     // cd target
     if (t === "cd" && tokens[i + 1] && !tokens[i + 1].startsWith("-")) {
       candidates.push(tokens[i + 1]);

@@ -3,8 +3,20 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { evaluateToolCall } = require("../lib/policy-engine");
-const { notifyHerdr } = require("../lib/herdr-notify");
+let evaluateToolCall;
+let notifyHerdr = () => {};
+
+try {
+  ({ evaluateToolCall } = require("../lib/policy-engine"));
+} catch (err) {
+  console.error(`[c4-permission-gate] Warning: failed to load policy-engine: ${err.message}`);
+}
+
+try {
+  ({ notifyHerdr } = require("../lib/herdr-notify"));
+} catch (err) {
+  console.error(`[c4-permission-gate] Warning: failed to load herdr-notify: ${err.message}`);
+}
 
 function loadPolicy() {
   const policyPath = path.join(__dirname, "..", "policy.json");
@@ -103,6 +115,23 @@ async function main() {
   const { toolName, params, workspaceRoot, cwd } = normalizePayload(rawInput);
   const policy = loadPolicy();
 
+  const isAgy = agent === "agy";
+  const isClaude = agent === "claude";
+  const isCodex = agent === "codex";
+
+  if (!evaluateToolCall) {
+    if (isAgy) {
+      process.stdout.write(
+        JSON.stringify({
+          decision: "force_ask",
+          reason: "Permission gate engine temporarily unavailable",
+        }) + "\n"
+      );
+      process.exit(0);
+    }
+    process.exit(0);
+  }
+
   const evalResult = evaluateToolCall({
     toolName,
     params,
@@ -110,10 +139,6 @@ async function main() {
     workspaceRoot,
     policy,
   });
-
-  const isAgy = agent === "agy";
-  const isClaude = agent === "claude";
-  const isCodex = agent === "codex";
 
   try {
     fs.appendFileSync(
@@ -205,6 +230,15 @@ async function main() {
 
 main().catch((err) => {
   console.error(`[c4-permission-gate] Fatal error: ${err.message}`);
-  // Fail-closed for safety
+  const { agent } = parseArgs();
+  if (agent === "agy") {
+    process.stdout.write(
+      JSON.stringify({
+        decision: "force_ask",
+        reason: `Permission gate encountered error: ${err.message}`,
+      }) + "\n"
+    );
+    process.exit(0);
+  }
   process.exit(1);
 });

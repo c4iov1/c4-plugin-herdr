@@ -5,7 +5,7 @@
   "main": "bin/gatekeeper.js",
   "type": "commonjs",
   "scripts": {
-    "test": "node scripts/status.js"
+    "test": "node test-cases.js"
   },
   "keywords": [
     "herdr",

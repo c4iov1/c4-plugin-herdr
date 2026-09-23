@@ -36,6 +36,11 @@ const READ_ONLY_BINARIES = new Set([
  */
 function isReadOnlyCommand(command) {
   const stripped = stripHeredocBodies(command);
+  // If command redirects stdout with > or >>, it is writing to a file, not read-only
+  // Exception: 2> /dev/null or 2>&1
+  if (/(^|[^2])>\s*\S+/.test(stripped)) {
+    return false;
+  }
   const parts = stripped.split(/[;&|]+/);
   for (let part of parts) {
     part = part.trim();
@@ -48,6 +53,55 @@ function isReadOnlyCommand(command) {
     }
   }
   return parts.length > 0;
+}
+
+/**
+ * Splits a compound shell command into individual sequential sub-commands.
+ * Respects single and double quotes and heredocs.
+ * Splits on &&, ||, and ;.
+ *
+ * @param {string} command - Compound shell command.
+ * @returns {string[]} Array of individual command strings.
+ */
+function splitCommandChain(command) {
+  if (!command) return [];
+  const stripped = stripHeredocBodies(command);
+  const parts = [];
+  let current = "";
+  let inDouble = false;
+  let inSingle = false;
+
+  for (let i = 0; i < stripped.length; i++) {
+    const ch = stripped[i];
+    const next = stripped[i + 1];
+
+    if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+      current += ch;
+    } else if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+      current += ch;
+    } else if (!inDouble && !inSingle) {
+      if ((ch === "&" && next === "&") || (ch === "|" && next === "|")) {
+        if (current.trim()) parts.push(current.trim());
+        current = "";
+        i++; // skip second operator character
+      } else if (ch === ";") {
+        if (current.trim()) parts.push(current.trim());
+        current = "";
+      } else {
+        current += ch;
+      }
+    } else {
+      current += ch;
+    }
+  }
+
+  if (current.trim()) {
+    parts.push(current.trim());
+  }
+
+  return parts.length > 0 ? parts : [command];
 }
 
 /**
@@ -127,6 +181,124 @@ function extractFilePaths(toolName, params) {
 }
 
 /**
+ * Evaluates a single, non-chained shell command against policy rules.
+ *
+ * @param {object} options
+ * @param {string} options.command - Shell command string.
+ * @param {string} options.cwd - Current working directory.
+ * @param {string} options.workspaceRoot - Active workspace root.
+ * @param {object} options.policy - Loaded policy configuration.
+ * @returns {object} Decision object.
+ */
+function evaluateSingleCommand({ command, cwd, workspaceRoot, policy }) {
+  const strippedCommand = stripHeredocBodies(command);
+
+  // Check path candidates inside the shell command for sensitive files
+  const pathCandidates = extractPathCandidates(command);
+  for (const rawPath of pathCandidates) {
+    const resolved = resolvePath(rawPath, cwd);
+    if (isProtectedPath(resolved, policy)) {
+      const reason = `Command touches protected sensitive file "${rawPath}".`;
+      return {
+        decision: "HARD_DENY",
+        reason,
+        directive: formatHardDenyDirective(command, reason),
+        command,
+      };
+    }
+  }
+
+  // Check Hard Deny Patterns (destructive / toxic)
+  for (const item of policy.hardDenyPatterns) {
+    const rx = new RegExp(item.pattern, "i");
+    if (rx.test(strippedCommand)) {
+      const reason = item.label;
+      return {
+        decision: "HARD_DENY",
+        reason,
+        directive: formatHardDenyDirective(command, reason),
+        command,
+      };
+    }
+  }
+
+  // Check Delegate To User Patterns (privileged / external / forced)
+  for (const item of policy.delegateToUserPatterns) {
+    const rx = new RegExp(item.pattern, "i");
+    if (rx.test(strippedCommand)) {
+      const reason = item.reason || item.label;
+      return {
+        decision: "DELEGATE_TO_USER",
+        reason,
+        label: item.label,
+        directive: formatDelegationDirective(command, reason),
+        command,
+      };
+    }
+  }
+
+  // Check Ask Patterns (interactive confirmation required)
+  for (const item of policy.askPatterns) {
+    const rx = new RegExp(item.pattern, "i");
+    if (rx.test(strippedCommand)) {
+      return {
+        decision: "ASK",
+        reason: `Command requires user approval: ${item.label}`,
+        command,
+      };
+    }
+  }
+
+  const isReadOnly = isReadOnlyCommand(command);
+
+  // Check path candidates for external workspace confinement
+  for (const rawPath of pathCandidates) {
+    // Ignore pure flags or device paths
+    if (rawPath.startsWith("/dev/") || rawPath === "/dev/null") continue;
+    const resolved = resolvePath(rawPath, cwd);
+    if (!isInsideWorkspace(resolved, workspaceRoot)) {
+      // Allow read-only commands (inspection/queries) to read outside the workspace
+      if (isReadOnly) {
+        continue;
+      }
+      return {
+        decision: "ASK",
+        reason: `Mutating command references path outside active workspace: "${rawPath}"`,
+        command,
+      };
+    }
+  }
+
+  // If the command is a pure read-only query/inspection command, auto-approve
+  if (isReadOnly) {
+    return {
+      decision: "ALLOW",
+      reason: "Read-only inspection command is auto-approved.",
+      command,
+    };
+  }
+
+  // Check Safe Command Prefixes
+  const lowerCmd = strippedCommand.toLowerCase();
+  for (const prefix of policy.safeCommandPrefixes) {
+    if (lowerCmd === prefix || lowerCmd.startsWith(prefix + " ")) {
+      return {
+        decision: "ALLOW",
+        reason: `Standard development command (${prefix}) auto-approved.`,
+        command,
+      };
+    }
+  }
+
+  // Fallback for unclassified commands: prompt the user (fail-closed)
+  return {
+    decision: "ASK",
+    reason: "Unclassified shell command requires human approval.",
+    command,
+  };
+}
+
+/**
  * Evaluates a tool call against the security policy.
  *
  * @param {object} options
@@ -194,22 +366,7 @@ function evaluateToolCall({ toolName, params, cwd, workspaceRoot, policy }) {
 
   const strippedCommand = stripHeredocBodies(command);
 
-  // Check path candidates inside the shell command for sensitive files
-  const pathCandidates = extractPathCandidates(command);
-  for (const rawPath of pathCandidates) {
-    const resolved = resolvePath(rawPath, effectiveCwd);
-    if (isProtectedPath(resolved, policy)) {
-      const reason = `Command touches protected sensitive file "${rawPath}".`;
-      return {
-        decision: "HARD_DENY",
-        reason,
-        directive: formatHardDenyDirective(command, reason),
-        command,
-      };
-    }
-  }
-
-  // Check Hard Deny Patterns (destructive / toxic)
+  // Global check across full command string for hard deny and delegate patterns
   for (const item of policy.hardDenyPatterns) {
     const rx = new RegExp(item.pattern, "i");
     if (rx.test(strippedCommand)) {
@@ -223,7 +380,6 @@ function evaluateToolCall({ toolName, params, cwd, workspaceRoot, policy }) {
     }
   }
 
-  // Check Delegate To User Patterns (privileged / external / forced)
   for (const item of policy.delegateToUserPatterns) {
     const rx = new RegExp(item.pattern, "i");
     if (rx.test(strippedCommand)) {
@@ -238,7 +394,6 @@ function evaluateToolCall({ toolName, params, cwd, workspaceRoot, policy }) {
     }
   }
 
-  // Check Ask Patterns (interactive confirmation required)
   for (const item of policy.askPatterns) {
     const rx = new RegExp(item.pattern, "i");
     if (rx.test(strippedCommand)) {
@@ -250,57 +405,57 @@ function evaluateToolCall({ toolName, params, cwd, workspaceRoot, policy }) {
     }
   }
 
-  const isReadOnly = isReadOnlyCommand(command);
+  // Split compound commands (&&, ||, ;) to evaluate each sub-command individually
+  const subCommands = splitCommandChain(command);
+  if (subCommands.length > 1) {
+    let mostSevere = null;
+    for (const subCmd of subCommands) {
+      const subResult = evaluateSingleCommand({
+        command: subCmd,
+        cwd: effectiveCwd,
+        workspaceRoot: effectiveRoot,
+        policy,
+      });
 
-  // Check path candidates for external workspace confinement
-  for (const rawPath of pathCandidates) {
-    // Ignore pure flags or device paths
-    if (rawPath.startsWith("/dev/") || rawPath === "/dev/null") continue;
-    const resolved = resolvePath(rawPath, effectiveCwd);
-    if (!isInsideWorkspace(resolved, effectiveRoot)) {
-      // Allow read-only commands (inspection/queries) to read outside the workspace
-      if (isReadOnly) {
-        continue;
+      if (subResult.decision === "HARD_DENY") {
+        return subResult;
       }
-      return {
-        decision: "ASK",
-        reason: `Mutating command references path outside active workspace: "${rawPath}"`,
-        command,
-      };
+      if (subResult.decision === "DELEGATE_TO_USER") {
+        if (!mostSevere || mostSevere.decision !== "DELEGATE_TO_USER") {
+          mostSevere = subResult;
+        }
+      } else if (subResult.decision === "ASK") {
+        if (!mostSevere) {
+          mostSevere = subResult;
+        }
+      }
     }
-  }
 
-  // If the command is a pure read-only query/inspection command, auto-approve
-  if (isReadOnly) {
+    if (mostSevere) {
+      return mostSevere;
+    }
+
     return {
       decision: "ALLOW",
-      reason: "Read-only inspection command is auto-approved.",
+      reason: "All chained sub-commands are auto-approved.",
       command,
     };
   }
 
-  // Check Safe Command Prefixes
-  const lowerCmd = strippedCommand.toLowerCase();
-  for (const prefix of policy.safeCommandPrefixes) {
-    if (lowerCmd === prefix || lowerCmd.startsWith(prefix + " ")) {
-      return {
-        decision: "ALLOW",
-        reason: `Standard development command (${prefix}) auto-approved.`,
-        command,
-      };
-    }
-  }
-
-  // Fallback for unclassified commands: prompt the user (fail-closed)
-  return {
-    decision: "ASK",
-    reason: `Unclassified shell command requires human approval.`,
+  // Single command evaluation
+  return evaluateSingleCommand({
     command,
-  };
+    cwd: effectiveCwd,
+    workspaceRoot: effectiveRoot,
+    policy,
+  });
 }
 
 module.exports = {
   evaluateToolCall,
+  evaluateSingleCommand,
+  splitCommandChain,
+  isReadOnlyCommand,
   formatDelegationDirective,
   formatHardDenyDirective,
 };
