@@ -55,6 +55,40 @@ function isReadOnlyCommand(command) {
   return parts.length > 0;
 }
 
+const LOCALHOST_URL_REGEX = /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|localhost\.localdomain)(:\d+)?(\/.*)?$/i;
+const EXTERNAL_URL_REGEX = /^(https?|ftp):\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|localhost\.localdomain)/i;
+
+/**
+ * Checks if a curl/wget command exclusively targets local development services
+ * (localhost, 127.0.0.1, 0.0.0.0, [::1]).
+ *
+ * @param {string} command - Shell command string.
+ * @returns {boolean} True if command is curl/wget strictly targeting localhost.
+ */
+function isLocalhostNetworkCommand(command) {
+  const stripped = stripHeredocBodies(command);
+  const words = splitShellWords(stripped);
+  if (words.length === 0) return false;
+
+  const bin = words[0].toLowerCase().split(/[/\\]/).pop();
+  if (bin !== "curl" && bin !== "wget") return false;
+
+  let hasLocalhost = false;
+  let hasExternal = false;
+
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i].replace(/^["']|["']$/g, "");
+    if (w.startsWith("-")) continue;
+    if (LOCALHOST_URL_REGEX.test(w)) {
+      hasLocalhost = true;
+    } else if (EXTERNAL_URL_REGEX.test(w)) {
+      hasExternal = true;
+    }
+  }
+
+  return hasLocalhost && !hasExternal;
+}
+
 /**
  * Splits a compound shell command into individual sequential sub-commands.
  * Respects single and double quotes and heredocs.
@@ -241,6 +275,9 @@ function evaluateSingleCommand({ command, cwd, workspaceRoot, policy }) {
   for (const item of policy.askPatterns) {
     const rx = new RegExp(item.pattern, "i");
     if (rx.test(strippedCommand)) {
+      if (item.label.toLowerCase().includes("network") && isLocalhostNetworkCommand(command)) {
+        continue;
+      }
       return {
         decision: "ASK",
         reason: `Command requires user approval: ${item.label}`,
@@ -274,6 +311,15 @@ function evaluateSingleCommand({ command, cwd, workspaceRoot, policy }) {
     return {
       decision: "ALLOW",
       reason: "Read-only inspection command is auto-approved.",
+      command,
+    };
+  }
+
+  // If the command is a localhost development network query, auto-approve
+  if (isLocalhostNetworkCommand(command)) {
+    return {
+      decision: "ALLOW",
+      reason: "Localhost development network query auto-approved.",
       command,
     };
   }
@@ -397,6 +443,9 @@ function evaluateToolCall({ toolName, params, cwd, workspaceRoot, policy }) {
   for (const item of policy.askPatterns) {
     const rx = new RegExp(item.pattern, "i");
     if (rx.test(strippedCommand)) {
+      if (item.label.toLowerCase().includes("network") && isLocalhostNetworkCommand(command)) {
+        continue;
+      }
       return {
         decision: "ASK",
         reason: `Command requires user approval: ${item.label}`,
@@ -456,6 +505,7 @@ module.exports = {
   evaluateSingleCommand,
   splitCommandChain,
   isReadOnlyCommand,
+  isLocalhostNetworkCommand,
   formatDelegationDirective,
   formatHardDenyDirective,
 };

@@ -127,6 +127,36 @@ const testCases = [
     cmd: "git checkout -b feat/my-branch",
     expected: "ALLOW",
   },
+  {
+    name: "curl localhost get allowed",
+    cmd: "curl -s -i http://localhost:5173/api/characters",
+    expected: "ALLOW",
+  },
+  {
+    name: "curl localhost post allowed",
+    cmd: "curl -s -i -X POST http://localhost:5173/api/characters",
+    expected: "ALLOW",
+  },
+  {
+    name: "curl localhost post with json payload allowed",
+    cmd: `curl -s -i -X POST http://localhost:5173/api/characters -H "Content-Type: application/json" -d '{"name": "test"}'`,
+    expected: "ALLOW",
+  },
+  {
+    name: "curl 127.0.0.1 allowed",
+    cmd: "curl http://127.0.0.1:3000/api",
+    expected: "ALLOW",
+  },
+  {
+    name: "curl external url asks",
+    cmd: "curl https://api.github.com/user",
+    expected: "ASK",
+  },
+  {
+    name: "node -e with cwd string allowed",
+    cmd: `node -e 'const { evaluateToolCall } = require("./lib/policy-engine"); const cwd = "/Users/caio/C4work/nin-rpg";'`,
+    expected: "ALLOW",
+  },
 ];
 
 let failed = 0;
