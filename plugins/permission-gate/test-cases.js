@@ -257,6 +257,46 @@ const testCases = [
     cmd: "time go test ./...",
     expected: "ALLOW",
   },
+  {
+    name: "go build standard",
+    cmd: "go build .",
+    expected: "ALLOW",
+  },
+  {
+    name: "go build package wildcard",
+    cmd: "go build ./...",
+    expected: "ALLOW",
+  },
+  {
+    name: "go build output to workspace bin",
+    cmd: "go build -o bin/server .",
+    expected: "ALLOW",
+  },
+  {
+    name: "go build output to /tmp",
+    cmd: "go build -o /tmp/server .",
+    expected: "ALLOW",
+  },
+  {
+    name: "go build with CGO_ENABLED env var",
+    cmd: "CGO_ENABLED=0 go build -o bin/server .",
+    expected: "ALLOW",
+  },
+  {
+    name: "go build with multiple env vars",
+    cmd: "GOOS=linux GOARCH=amd64 go build -o bin/app .",
+    expected: "ALLOW",
+  },
+  {
+    name: "time with env vars and go build",
+    cmd: "time CGO_ENABLED=0 go build .",
+    expected: "ALLOW",
+  },
+  {
+    name: "go build with absolute binary path",
+    cmd: "/usr/local/go/bin/go build ./...",
+    expected: "ALLOW",
+  },
 ];
 
 let failed = 0;

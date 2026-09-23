@@ -42,7 +42,8 @@ const READ_ONLY_PREFIXES = [
 ];
 
 /**
- * Strips command wrappers such as 'time' or '/usr/bin/time' to evaluate the underlying command.
+ * Strips command wrappers such as 'time', '/usr/bin/time', and leading environment variable assignments
+ * (e.g. CGO_ENABLED=0 GOOS=linux) to evaluate the underlying command.
  *
  * @param {string} command - Shell command.
  * @returns {string} Unwrapped command.
@@ -50,11 +51,44 @@ const READ_ONLY_PREFIXES = [
 function stripCommandWrappers(command) {
   if (!command) return "";
   let cmd = command.trim();
+
+  // Strip leading environment variable assignments (e.g. CGO_ENABLED=0 GOOS=linux)
+  const envRegex = /^(?:[a-zA-Z_][a-zA-Z0-9_]*=(?:'[^']*'|"[^"]*"|\S+)\s+)+/;
+  if (envRegex.test(cmd)) {
+    cmd = cmd.replace(envRegex, "").trim();
+  }
+
+  // Strip leading 'time' or '/usr/bin/time' with optional flags
   const timeRegex = /^(?:\/usr\/bin\/)?time(?:\s+-[a-zA-Z0-9_-]+)*\s+/i;
   if (timeRegex.test(cmd)) {
     cmd = cmd.replace(timeRegex, "").trim();
   }
+
+  // Strip any env vars after time (e.g. time CGO_ENABLED=0 go build)
+  if (envRegex.test(cmd)) {
+    cmd = cmd.replace(envRegex, "").trim();
+  }
+
   return cmd;
+}
+
+/**
+ * Checks if a target path is in a standard system temporary directory.
+ *
+ * @param {string} targetPath - Path to check.
+ * @returns {boolean} True if target is within /tmp, /private/tmp, or /var/tmp.
+ */
+function isTemporaryPath(targetPath) {
+  if (!targetPath) return false;
+  const normalized = targetPath.replace(/\\/g, "/");
+  return (
+    normalized.startsWith("/tmp/") ||
+    normalized === "/tmp" ||
+    normalized.startsWith("/private/tmp/") ||
+    normalized === "/private/tmp" ||
+    normalized.startsWith("/var/tmp/") ||
+    normalized === "/var/tmp"
+  );
 }
 
 /**
@@ -338,8 +372,8 @@ function evaluateSingleCommand({ command, cwd, workspaceRoot, policy }) {
     if (rawPath.startsWith("/dev/") || rawPath === "/dev/null") continue;
     const resolved = resolvePath(rawPath, cwd);
     if (!isInsideWorkspace(resolved, workspaceRoot)) {
-      // Allow read-only commands (inspection/queries) to read outside the workspace
-      if (isReadOnly) {
+      // Allow read-only commands (inspection/queries) or temporary build files to be outside workspace
+      if (isReadOnly || isTemporaryPath(resolved)) {
         continue;
       }
       return {
@@ -371,12 +405,22 @@ function evaluateSingleCommand({ command, cwd, workspaceRoot, policy }) {
   // Check Safe Command Prefixes
   const lowerCmd = strippedCommand.toLowerCase();
   const lowerRaw = stripHeredocBodies(command).toLowerCase();
+
+  // Also normalize command binary (e.g. /usr/local/go/bin/go build -> go build)
+  let lowerNormalized = "";
+  const words = strippedCommand.split(/\s+/);
+  if (words.length > 0 && words[0].includes("/")) {
+    words[0] = path.basename(words[0]);
+    lowerNormalized = words.join(" ").toLowerCase();
+  }
+
   for (const prefix of policy.safeCommandPrefixes) {
     if (
       lowerCmd === prefix ||
       lowerCmd.startsWith(prefix + " ") ||
       lowerRaw === prefix ||
-      lowerRaw.startsWith(prefix + " ")
+      lowerRaw.startsWith(prefix + " ") ||
+      (lowerNormalized && (lowerNormalized === prefix || lowerNormalized.startsWith(prefix + " ")))
     ) {
       return {
         decision: "ALLOW",

@@ -78,25 +78,40 @@ function extractPathCandidates(command) {
   const tokens = splitShellWords(stripped);
   const candidates = [];
 
-  // Track sqlite3 positional arguments (first is DB path, remaining are SQL queries)
+  // Track sqlite3 positional arguments and find the primary command binary token
   let isSqlite = false;
   let sqlitePositionalCount = 0;
   let sqliteIndex = -1;
+  let commandIndex = -1;
+
   for (let idx = 0; idx < tokens.length; idx++) {
-    const tokenClean = tokens[idx].toLowerCase().split(/[/\\]/).pop();
+    const t = tokens[idx];
+    if (SHELL_OPERATORS.has(t) || t.startsWith("-")) continue;
+    if (/^[a-zA-Z_][a-zA-Z0-9_]*=/.test(t)) continue;
+
+    const tokenClean = t.toLowerCase().split(/[/\\]/).pop();
+    if (tokenClean === "time") continue;
+
+    if (commandIndex === -1) {
+      commandIndex = idx;
+    }
+
     if (tokenClean === "sqlite3") {
       isSqlite = true;
       sqliteIndex = idx;
       break;
     }
-    if (tokenClean !== "time" && !tokens[idx].startsWith("-")) {
-      break;
-    }
+    break;
   }
 
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (!t || SHELL_OPERATORS.has(t) || t.startsWith("-")) continue;
+
+    // The primary executable binary being run is not a file target to be mutated
+    if (i === commandIndex) {
+      continue;
+    }
 
     if (isSqlite && i > sqliteIndex) {
       sqlitePositionalCount++;
