@@ -92,6 +92,7 @@
     "git commit",
     "git restore",
     "git merge",
+    "git grep",
     "pnpm",
     "npm",
     "yarn",

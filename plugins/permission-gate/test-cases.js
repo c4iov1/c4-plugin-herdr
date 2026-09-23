@@ -222,6 +222,16 @@ const testCases = [
     cmd: "tailscale",
     expected: "ALLOW",
   },
+  {
+    name: "git grep basic pattern",
+    cmd: "git grep evaluateToolCall",
+    expected: "ALLOW",
+  },
+  {
+    name: "git grep with path and flags",
+    cmd: "git grep -n -i 'isreadonly' -- plugins/",
+    expected: "ALLOW",
+  },
 ];
 
 let failed = 0;

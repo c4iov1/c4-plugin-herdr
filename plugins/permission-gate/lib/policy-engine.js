@@ -29,6 +29,7 @@ const READ_ONLY_BINARIES = new Set([
 ]);
 
 const READ_ONLY_PREFIXES = [
+  "git grep",
   "launchctl print",
   "launchctl list",
   "tailscale status",
