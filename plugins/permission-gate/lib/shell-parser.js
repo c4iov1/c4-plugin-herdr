@@ -78,9 +78,24 @@ function extractPathCandidates(command) {
   const tokens = splitShellWords(stripped);
   const candidates = [];
 
+  // Track sqlite3 positional arguments (first is DB path, remaining are SQL queries)
+  let isSqlite = false;
+  let sqlitePositionalCount = 0;
+  if (tokens.length > 0 && tokens[0].toLowerCase().split(/[/\\]/).pop() === "sqlite3") {
+    isSqlite = true;
+  }
+
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (!t || SHELL_OPERATORS.has(t) || t.startsWith("-")) continue;
+
+    if (isSqlite && i > 0) {
+      sqlitePositionalCount++;
+      if (sqlitePositionalCount > 1) {
+        // Skip SQL statements and dot-commands
+        continue;
+      }
+    }
 
     // Skip inline script arguments following -c, -e, --eval (e.g. python3 -c "<code>", node -e "<code>")
     if (i > 0 && (tokens[i - 1] === "-c" || tokens[i - 1] === "-e" || tokens[i - 1] === "--eval")) {
@@ -94,6 +109,11 @@ function extractPathCandidates(command) {
 
     // Skip scoped package names like @org/pkg
     if (t.startsWith("@")) {
+      continue;
+    }
+
+    // Skip Go package pattern wildcards (e.g. ./... or ./pkg/...)
+    if (t === "./..." || t.endsWith("/...")) {
       continue;
     }
 

@@ -157,6 +157,71 @@ const testCases = [
     cmd: `node -e 'const { evaluateToolCall } = require("./lib/policy-engine"); const cwd = "/Users/caio/C4work/nin-rpg";'`,
     expected: "ALLOW",
   },
+  {
+    name: "sqlite3 select query inside workspace",
+    cmd: 'sqlite3 db.sqlite "SELECT * FROM users"',
+    expected: "ALLOW",
+  },
+  {
+    name: "sqlite3 dot command inside workspace",
+    cmd: 'sqlite3 ./prisma/dev.db ".tables"',
+    expected: "ALLOW",
+  },
+  {
+    name: "sqlite3 read-only query outside workspace",
+    cmd: 'sqlite3 /tmp/test.db "SELECT 1"',
+    expected: "ALLOW",
+  },
+  {
+    name: "sqlite3 schema inspection outside workspace",
+    cmd: 'sqlite3 /tmp/test.db ".schema"',
+    expected: "ALLOW",
+  },
+  {
+    name: "go test wildcard ./...",
+    cmd: "go test ./...",
+    expected: "ALLOW",
+  },
+  {
+    name: "go test with verbose flag",
+    cmd: "go test -v ./...",
+    expected: "ALLOW",
+  },
+  {
+    name: "go test with race flag",
+    cmd: "go test -race ./...",
+    expected: "ALLOW",
+  },
+  {
+    name: "launchctl print gui domain",
+    cmd: "launchctl print gui/501",
+    expected: "ALLOW",
+  },
+  {
+    name: "launchctl print system service",
+    cmd: "launchctl print system/com.apple.syslogd",
+    expected: "ALLOW",
+  },
+  {
+    name: "launchctl list",
+    cmd: "launchctl list",
+    expected: "ALLOW",
+  },
+  {
+    name: "tailscale status",
+    cmd: "tailscale status",
+    expected: "ALLOW",
+  },
+  {
+    name: "tailscale ip flag",
+    cmd: "tailscale ip -4",
+    expected: "ALLOW",
+  },
+  {
+    name: "tailscale base command",
+    cmd: "tailscale",
+    expected: "ALLOW",
+  },
 ];
 
 let failed = 0;

@@ -28,6 +28,18 @@ const READ_ONLY_BINARIES = new Set([
   "true",
 ]);
 
+const READ_ONLY_PREFIXES = [
+  "launchctl print",
+  "launchctl list",
+  "tailscale status",
+  "tailscale ip",
+  "tailscale ping",
+  "tailscale netcheck",
+  "tailscale version",
+  "tailscale whois",
+  "tailscale",
+];
+
 /**
  * Determine if a shell command consists exclusively of read-only/inspection operations.
  *
@@ -48,7 +60,21 @@ function isReadOnlyCommand(command) {
     const words = splitShellWords(part);
     if (words.length === 0) continue;
     const bin = words[0].toLowerCase().split(/[/\\]/).pop();
-    if (!READ_ONLY_BINARIES.has(bin)) {
+
+    if (bin === "sqlite3") {
+      const isMutatingSql = /\b(insert|update|delete|create|drop|truncate|alter|replace)\b/i.test(part);
+      if (isMutatingSql) {
+        return false;
+      }
+      continue;
+    }
+
+    const lowerPart = part.toLowerCase();
+    const isPrefixMatch = READ_ONLY_PREFIXES.some(
+      (prefix) => lowerPart === prefix || lowerPart.startsWith(prefix + " ")
+    );
+
+    if (!READ_ONLY_BINARIES.has(bin) && !isPrefixMatch) {
       return false;
     }
   }

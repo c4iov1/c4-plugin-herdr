@@ -19,7 +19,8 @@ function isInsideWorkspace(targetPath, workspaceRoot) {
   if (resolvedTarget === resolvedRoot) return true;
 
   const relative = path.relative(resolvedRoot, resolvedTarget);
-  return !relative.startsWith("..") && !path.isAbsolute(relative);
+  const escapes = relative === ".." || relative.startsWith("../") || relative.startsWith("..\\");
+  return !escapes && !path.isAbsolute(relative);
 }
 
 /**

@@ -131,6 +131,11 @@
     "jest",
     "go build",
     "go test",
+    "go",
+    "sqlite3",
+    "launchctl print",
+    "launchctl list",
+    "tailscale",
     "make",
     "cmake"
   ],
