@@ -29,7 +29,7 @@ PLUGIN_ID = "c4.usage-quote-subs"
 VERSION = "0.1.0"
 PROVIDERS = ("claude", "codex", "gemini")
 PROVIDER_NAMES = {"claude": "Claude", "codex": "Codex", "gemini": "Gemini"}
-STATUS_NAMES = {"claude": "Cld", "codex": "GPT", "gemini": "AGY"}
+STATUS_NAMES = {"claude": "Cld", "codex": "Gpt", "gemini": "Agy"}
 PROVIDER_ICONS = {"claude": "\uec82", "codex": "\uec81", "gemini": "G"}
 
 BAR_REFRESH_AGE = 300

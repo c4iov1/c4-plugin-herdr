@@ -17,7 +17,7 @@ usage application.
 
 The Gemini adapter converts `remaining_fraction` to percent used. It recognizes
 explicit five-hour and weekly buckets. The status line shows one compact
-percentage per provider (`Cld`, `GPT`, `AGY`) without window or reset labels;
+percentage per provider (`Cld`, `Gpt`, `Agy`) without window or reset labels;
 the detail popup shows each window and its reset time.
 
 The detail popup keeps Antigravity pools separate. Current versions commonly
@@ -50,7 +50,7 @@ command the user must run while an agent is working.
 Example status output:
 
 ```text
-Cld 21% | GPT 4% | AGY 64%
+Cld 21% | Gpt 4% | Agy 64%
 ```
 
 ## Dashboard

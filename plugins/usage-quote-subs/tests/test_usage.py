@@ -198,7 +198,7 @@ class Rendering(unittest.TestCase):
             ),
         }
         line = usage.status_line(data, NOW, self.display)
-        self.assertEqual(line, "AGY 64%")
+        self.assertEqual(line, "Agy 64%")
 
     def test_status_marks_stale_values(self):
         data = {
@@ -267,7 +267,7 @@ class CacheAndSetup(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Cld 21% | GPT 4% | AGY 18%", result.stdout)
+        self.assertIn("Cld 21% | Gpt 4% | Agy 18%", result.stdout)
 
     def test_config_snippet_uses_rebranded_action(self):
         snippet = usage.config_snippet(Path("/tmp/status.sh"))
