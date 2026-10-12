@@ -16,9 +16,9 @@ usage application.
 | Gemini | Existing Antigravity CLI login or running Antigravity process | `agy /usage` structured output, with the local quota service as fallback |
 
 The Gemini adapter converts `remaining_fraction` to percent used. It recognizes
-explicit five-hour and weekly buckets. When the provider reports only a weekly
-bucket, the status line labels it `7d` rather than presenting it as a five-hour
-limit.
+explicit five-hour and weekly buckets. The status line shows one compact
+percentage per provider (`Cld`, `GPT`, `AGY`) without window or reset labels;
+the detail popup shows each window and its reset time.
 
 The detail popup keeps Antigravity pools separate. Current versions commonly
 report `Gemini Models` and `Claude and GPT models`; each pool is shown with the
@@ -50,7 +50,7 @@ command the user must run while an agent is working.
 Example status output:
 
 ```text
-Claude 21%/5h->14:35 | Codex 4%/5h->16:10 | Gemini 64%/7d->Fri 14:09
+Cld 21% | GPT 4% | AGY 64%
 ```
 
 ## Dashboard

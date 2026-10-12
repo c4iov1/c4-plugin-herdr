@@ -5,7 +5,6 @@ import sys
 import tempfile
 import time
 import unittest
-from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
@@ -187,7 +186,7 @@ class Rendering(unittest.TestCase):
         }
         self.assertEqual(
             usage.status_line(data, NOW, self.display),
-            f"Claude 21%/5h->{datetime.fromtimestamp(NOW + 3600):%H:%M}",
+            "Cld 21%",
         )
 
     def test_status_labels_weekly_fallback(self):
@@ -199,7 +198,7 @@ class Rendering(unittest.TestCase):
             ),
         }
         line = usage.status_line(data, NOW, self.display)
-        self.assertIn("Gemini 64%/7d->", line)
+        self.assertEqual(line, "AGY 64%")
 
     def test_status_marks_stale_values(self):
         data = {
@@ -210,7 +209,7 @@ class Rendering(unittest.TestCase):
             "codex": {"error": {"code": "nologin"}},
             "gemini": {"error": {"code": "nologin"}},
         }
-        self.assertIn("~21%/5h", usage.status_line(data, NOW, self.display))
+        self.assertEqual(usage.status_line(data, NOW, self.display), "Cld ~21%")
 
     def test_dashboard_fits_popup_width(self):
         data = usage.demo_data(NOW)
@@ -268,7 +267,7 @@ class CacheAndSetup(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Claude 21%/5h", result.stdout)
+        self.assertIn("Cld 21% | GPT 4% | AGY 18%", result.stdout)
 
     def test_config_snippet_uses_rebranded_action(self):
         snippet = usage.config_snippet(Path("/tmp/status.sh"))

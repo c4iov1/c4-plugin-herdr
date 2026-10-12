@@ -29,6 +29,7 @@ PLUGIN_ID = "c4.usage-quote-subs"
 VERSION = "0.1.0"
 PROVIDERS = ("claude", "codex", "gemini")
 PROVIDER_NAMES = {"claude": "Claude", "codex": "Codex", "gemini": "Gemini"}
+STATUS_NAMES = {"claude": "Cld", "codex": "GPT", "gemini": "AGY"}
 PROVIDER_ICONS = {"claude": "\uec82", "codex": "\uec81", "gemini": "G"}
 
 BAR_REFRESH_AGE = 300
@@ -76,7 +77,7 @@ class Display:
         self.icons = (settings or {}).get("icons") == "nerd"
 
     def provider(self, provider):
-        return f"{PROVIDER_ICONS[provider]} " if self.icons else PROVIDER_NAMES[provider]
+        return f"{PROVIDER_ICONS[provider]} " if self.icons else STATUS_NAMES[provider]
 
 
 def attempt(provider):
@@ -313,10 +314,7 @@ def status_line(data, now, display):
             continue
         window = preferred_window(windows)
         stale = "~" if now - reading.get("fetched_at", 0) > STALE_AFTER else ""
-        entries.append(
-            f"{display.provider(provider)} {stale}{round(window['used'])}%/{window_code(window)}"
-            f"->{reset_clock(window.get('resets_at'), now)}"
-        )
+        entries.append(f"{display.provider(provider)} {stale}{round(window['used'])}%")
     return " | ".join(entries)
 
 
