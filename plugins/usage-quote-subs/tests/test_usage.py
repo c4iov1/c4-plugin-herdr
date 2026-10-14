@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import subprocess
@@ -75,6 +76,36 @@ ANTIGRAVITY_LOCAL = {
 
 
 class ProviderParsing(unittest.TestCase):
+    def test_codex_accounts_use_separate_credentials(self):
+        payload = {"rate_limit": {"primary_window": {"used_percent": 12}}}
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            for name, token in (("first", "first-token"), (".codex-conta2", "second-token")):
+                (home / name).mkdir()
+                (home / name / "auth.json").write_text(json.dumps({
+                    "tokens": {"access_token": token, "account_id": name}
+                }))
+            with mock.patch.dict(os.environ, {"CODEX_HOME": str(home / "first")}), \
+                 mock.patch.object(providers.Path, "home", return_value=home), \
+                 mock.patch.object(providers, "request_json", return_value=payload) as request:
+                providers.fetch_codex()
+                providers.fetch_codex2()
+            headers = [call.args[1] for call in request.call_args_list]
+            self.assertEqual([item["Authorization"] for item in headers],
+                             ["Bearer first-token", "Bearer second-token"])
+            self.assertEqual([item["ChatGPT-Account-Id"] for item in headers],
+                             ["first", ".codex-conta2"])
+
+    def test_missing_second_account_does_not_use_keychain(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(providers.Path, "home", return_value=Path(directory)), \
+             mock.patch.object(providers.sys, "platform", "darwin"), \
+             mock.patch.object(providers.subprocess, "run") as run:
+            with self.assertRaises(providers.ProviderError) as error:
+                providers.fetch_codex2()
+            self.assertEqual(error.exception.code, "nologin")
+            run.assert_not_called()
+
     def test_antigravity_cli_windows(self):
         windows = providers.parse_antigravity(ANTIGRAVITY_CLI)
         self.assertEqual(
@@ -183,6 +214,7 @@ class Rendering(unittest.TestCase):
             ),
             "codex": {"error": {"code": "nologin"}},
             "gemini": {"error": {"code": "nologin"}},
+            "codex2": {"error": {"code": "nologin"}},
         }
         self.assertEqual(
             usage.status_line(data, NOW, self.display),
@@ -191,17 +223,18 @@ class Rendering(unittest.TestCase):
 
     def test_status_labels_weekly_fallback(self):
         data = {
+            "codex2": {"error": {"code": "nologin"}},
             "claude": {"error": {"code": "nologin"}},
-            "codex": {"error": {"code": "nologin"}},
-            "gemini": self.reading(
+            "codex": self.reading(
                 [{"kind": "weekly", "used": 64, "resets_at": NOW + 86400}]
             ),
         }
         line = usage.status_line(data, NOW, self.display)
-        self.assertEqual(line, "Agy 64%")
+        self.assertEqual(line, "Gpt 64%")
 
     def test_status_marks_stale_values(self):
         data = {
+            "codex2": {"error": {"code": "nologin"}},
             "claude": self.reading(
                 [{"kind": "session", "used": 21, "resets_at": NOW + 3600}],
                 fetched_at=NOW - 3600,
@@ -216,13 +249,22 @@ class Rendering(unittest.TestCase):
         for line in usage.dashboard_lines(data, NOW, False, False, 70, self.display):
             self.assertLessEqual(usage.text_width(line), 70, usage.ANSI.sub("", line))
 
-    def test_dashboard_separates_antigravity_pools(self):
+    def test_dashboard_hides_disabled_antigravity(self):
         lines = usage.dashboard_lines(
             usage.demo_data(NOW), NOW, False, False, 70, self.display
         )
         plain = "\n".join(usage.ANSI.sub("", line) for line in lines)
-        self.assertIn("Gemini Models", plain)
-        self.assertIn("Five Hour", plain)
+        self.assertNotIn("Gemini Models", plain)
+        self.assertNotIn("Gemini", plain)
+
+    def test_refresh_skips_disabled_antigravity(self):
+        with mock.patch.object(usage, "DEMO", False), \
+             mock.patch.object(usage, "cache_lock", contextlib.nullcontext), \
+             mock.patch.object(usage, "load_cache", return_value={}), \
+             mock.patch.object(usage, "save_cache"), \
+             mock.patch.object(usage, "fetch_due", return_value={}) as fetch:
+            usage.refresh(0)
+        self.assertEqual(fetch.call_args.args[0], ["claude", "codex", "codex2"])
 
     def test_provider_text_is_sanitized(self):
         self.assertEqual(usage.safe_text("Plan\x1b]0;spoof\x07\nName"), "Plan Name")
@@ -267,7 +309,7 @@ class CacheAndSetup(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Cld 21% | Gpt 4% | Agy 18%", result.stdout)
+        self.assertEqual(result.stdout.strip(), "Cld 21% | Gpt 4% | Gpt2 12%")
 
     def test_config_snippet_uses_rebranded_action(self):
         snippet = usage.config_snippet(Path("/tmp/status.sh"))

@@ -1,7 +1,12 @@
 # Usage Quote Subs
 
-Usage Quote Subs shows subscription quota for Claude Code, Codex, and
-Gemini/Antigravity in Herdr. It provides a compact tab-bar status command and
+Usage Quote Subs shows subscription quota for Claude Code and Codex in Herdr.
+The second Codex account reads `~/.codex-conta2/auth.json` independently of
+`CODEX_HOME`, appearing as `Codex2` in the dashboard and `Gpt2` in the tab bar.
+If its credentials are missing, it does not fall back to the first account.
+Gemini/Antigravity is disabled: it is neither queried nor displayed, including
+previously cached readings. Its adapter is retained for future use.
+The plugin provides a compact tab-bar status command and
 an interactive detail popup.
 
 The plugin uses Python's standard library and does not require an additional
@@ -50,7 +55,7 @@ command the user must run while an agent is working.
 Example status output:
 
 ```text
-Cld 21% | Gpt 4% | Agy 64%
+Cld 21% | Gpt 4% | Gpt2 12%
 ```
 
 ## Dashboard

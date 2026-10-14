@@ -2,7 +2,7 @@ id = "c4.usage-quote-subs"
 name = "Usage Quote Subs"
 version = "0.1.0"
 min_herdr_version = "0.9.1"
-description = "Shows Claude, Codex, and Gemini subscription usage in the Herdr tab bar and a detail popup."
+description = "Shows Claude and Codex subscription usage in the Herdr tab bar and a detail popup."
 platforms = ["linux", "macos", "windows"]
 
 [[startup]]

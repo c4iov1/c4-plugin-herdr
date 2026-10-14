@@ -8,6 +8,7 @@ request quota information. It does not make model requests.
 - Claude Code OAuth access token from `CLAUDE_CODE_OAUTH_TOKEN`, its macOS
   Keychain item, or `$CLAUDE_CONFIG_DIR/.credentials.json`.
 - Codex access token and account ID from `$CODEX_HOME/auth.json`.
+- Second Codex account access token and account ID from `~/.codex-conta2/auth.json`.
 - Antigravity quota through the signed-in `agy` CLI. If that command is not
   available, it may inspect a running Antigravity process, its listening ports,
   and its command-line CSRF token to query the loopback quota service.

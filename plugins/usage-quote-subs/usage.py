@@ -27,10 +27,11 @@ else:
 
 PLUGIN_ID = "c4.usage-quote-subs"
 VERSION = "0.1.0"
-PROVIDERS = ("claude", "codex", "gemini")
-PROVIDER_NAMES = {"claude": "Claude", "codex": "Codex", "gemini": "Gemini"}
-STATUS_NAMES = {"claude": "Cld", "codex": "Gpt", "gemini": "Agy"}
-PROVIDER_ICONS = {"claude": "\uec82", "codex": "\uec81", "gemini": "G"}
+# Antigravity is disabled; keep its adapter available for future use.
+PROVIDERS = ("claude", "codex", "codex2")
+PROVIDER_NAMES = {"claude": "Claude", "codex": "Codex", "codex2": "Codex2", "gemini": "Gemini"}
+STATUS_NAMES = {"claude": "Cld", "codex": "Gpt", "codex2": "Gpt2", "gemini": "Agy"}
+PROVIDER_ICONS = {"claude": "\uec82", "codex": "\uec81", "codex2": "Gpt2", "gemini": "G"}
 
 BAR_REFRESH_AGE = 300
 DASHBOARD_REFRESH_AGE = 120
@@ -139,6 +140,14 @@ def demo_data(now):
             "windows": [
                 {"kind": "session", "used": 4, "resets_at": now + 4 * hour},
                 {"kind": "weekly", "used": 19, "resets_at": now + 5 * day},
+            ],
+        },
+        "codex2": {
+            "plan": "ChatGPT Plus",
+            "fetched_at": now - 20,
+            "windows": [
+                {"kind": "session", "used": 12, "resets_at": now + 3 * hour},
+                {"kind": "weekly", "used": 28, "resets_at": now + 4 * day},
             ],
         },
         "gemini": {
@@ -327,6 +336,7 @@ COLORS = {
     "bad": (247, 118, 142),
     "claude": (217, 119, 87),
     "codex": (236, 236, 241),
+    "codex2": (236, 236, 241),
     "gemini": (123, 170, 247),
 }
 ANSI = re.compile(r"\x1b\[[0-9;]*m")

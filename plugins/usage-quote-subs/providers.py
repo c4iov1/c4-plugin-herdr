@@ -176,13 +176,13 @@ def parse_codex(payload):
     return windows
 
 
-def fetch_codex():
-    auth_file = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "auth.json"
+def fetch_codex(config_dir=None):
+    auth_file = Path(config_dir or os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "auth.json"
     try:
         auth = json.loads(auth_file.read_text(encoding="utf-8"))
     except (OSError, ValueError, KeyError, TypeError):
         auth = None
-    if auth is None and sys.platform == "darwin":
+    if auth is None and config_dir is None and sys.platform == "darwin":
         try:
             result = subprocess.run(
                 ["/usr/bin/security", "find-generic-password", "-s", "Codex Auth", "-w"],
@@ -211,6 +211,10 @@ def fetch_codex():
         "plan": f"ChatGPT {(payload.get('plan_type') or '').title()}".strip(),
         "windows": parse_codex(payload),
     }
+
+
+def fetch_codex2():
+    return fetch_codex(Path.home() / ".codex-conta2")
 
 
 def antigravity_binary():
@@ -413,5 +417,6 @@ def fetch_gemini():
 FETCHERS = {
     "claude": fetch_claude,
     "codex": fetch_codex,
+    "codex2": fetch_codex2,
     "gemini": fetch_gemini,
 }
