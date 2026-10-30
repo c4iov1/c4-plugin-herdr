@@ -27,8 +27,7 @@ else:
 
 PLUGIN_ID = "c4.usage-quote-subs"
 VERSION = "0.1.0"
-# Antigravity is disabled; keep its adapter available for future use.
-PROVIDERS = ("claude", "codex", "codex2")
+PROVIDERS = ("claude", "codex", "codex2", "gemini")
 PROVIDER_NAMES = {"claude": "Claude", "codex": "Codex", "codex2": "Codex2", "gemini": "Gemini"}
 STATUS_NAMES = {"claude": "Cld", "codex": "Gpt", "codex2": "Gpt2", "gemini": "Agy"}
 PROVIDER_ICONS = {"claude": "\uec82", "codex": "\uec81", "codex2": "Gpt2", "gemini": "G"}
